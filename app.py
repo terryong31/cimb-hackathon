@@ -224,7 +224,7 @@ Provide a clear, concise explanation of the fraud indicators and recommend next 
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=2000  # Increased for reasoning models
+            max_completion_tokens=2000  # For newer models like gpt-5-mini
         )
         
         result = response.choices[0].message.content
