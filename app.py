@@ -193,7 +193,11 @@ def call_azure_openai(transaction):
     """Call Azure OpenAI for explanation or return mock"""
     if not OPENAI_AVAILABLE:
         print("⚠️ Using mock explanation (OpenAI not configured)")
-        return get_mock_explanation(transaction)
+        return {
+            'explanation': get_mock_explanation(transaction),
+            'used_openai': False,
+            'error': 'OpenAI not configured'
+        }
     
     try:
         print(f"🤖 Calling Azure OpenAI at {AZURE_OPENAI_ENDPOINT}")
@@ -239,14 +243,23 @@ Recommendation: Review transaction details and verify customer identity before p
         
         result = response.choices[0].message.content
         print(f"✅ Got response: {len(result)} characters")
-        return result
+        return {
+            'explanation': result,
+            'used_openai': True,
+            'error': None
+        }
     
     except Exception as e:
-        print(f"❌ Azure OpenAI Error: {type(e).__name__}: {e}")
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        print(f"❌ Azure OpenAI Error: {error_msg}")
         import traceback
         traceback.print_exc()
         print("   Using mock explanation as fallback")
-        return get_mock_explanation(transaction)
+        return {
+            'explanation': get_mock_explanation(transaction),
+            'used_openai': False,
+            'error': error_msg
+        }
 
 
 @app.route('/api/status', methods=['GET'])
@@ -255,7 +268,14 @@ def status():
     return jsonify({
         'status': 'online',
         'ml_api_configured': ML_API_AVAILABLE,
-        'openai_configured': OPENAI_AVAILABLE
+        'openai_configured': OPENAI_AVAILABLE,
+        'debug_info': {
+            'endpoint_set': bool(AZURE_OPENAI_ENDPOINT),
+            'endpoint_value': f"{AZURE_OPENAI_ENDPOINT[:30]}..." if AZURE_OPENAI_ENDPOINT else None,
+            'key_set': bool(AZURE_OPENAI_KEY),
+            'key_length': len(AZURE_OPENAI_KEY) if AZURE_OPENAI_KEY else 0,
+            'deployment': AZURE_OPENAI_DEPLOYMENT
+        }
     })
 
 
@@ -363,16 +383,20 @@ def explain_fraud():
     
     try:
         print("   Calling call_azure_openai()...")
-        explanation = call_azure_openai(data)
-        print(f"   Got explanation: {explanation[:100] if explanation else 'EMPTY'}...")
+        result = call_azure_openai(data)
+        print(f"   Got result: used_openai={result.get('used_openai')}, error={result.get('error')}")
         
         return jsonify({
-            'explanation': explanation,
-            'openai_mock_mode': not OPENAI_AVAILABLE
+            'explanation': result['explanation'],
+            'openai_mock_mode': not result['used_openai'],
+            'used_openai': result['used_openai'],
+            'error': result.get('error')
         })
     
     except Exception as e:
-        return jsonify({'error': f'Error generating explanation: {str(e)}'}), 500
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        print(f"❌ Exception in explain_fraud: {error_msg}")
+        return jsonify({'error': f'Error generating explanation: {error_msg}'}), 500
 
 
 @app.route('/')
