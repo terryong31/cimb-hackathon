@@ -209,36 +209,19 @@ def call_azure_openai(transaction):
             api_version="2024-08-01-preview"
         )
         
-        prompt = f"""As a fraud detection expert, analyze this transaction and explain why it might be fraudulent:
+        # Simplified prompt that works better with gpt-5-mini
+        prompt = f"""Analyze this suspicious transaction:
+Amount: RM{transaction.get('TransactionAmount', 0):,.2f}, Duration: {transaction.get('TransactionDuration', 0)}s, Login Attempts: {transaction.get('LoginAttempts', 0)}, Balance: RM{transaction.get('AccountBalance', 0):,.2f}, Age: {transaction.get('CustomerAge', 0)}, Fraud Score: {transaction.get('fraud_score', 0):.1%}
 
-Transaction Details:
-- Amount: RM{transaction.get('TransactionAmount', 0):,.2f}
-- Duration: {transaction.get('TransactionDuration', 0)} seconds
-- Login Attempts: {transaction.get('LoginAttempts', 0)}
-- Account Balance: RM{transaction.get('AccountBalance', 0):,.2f}
-- Customer Age: {transaction.get('CustomerAge', 0)}
-- Fraud Score: {transaction.get('fraud_score', 0):.2%}
-
-Provide a clear, concise explanation of the fraud indicators and recommend next steps. For example:
-
-🚨 Fraud Alert Analysis
-
-This transaction has been flagged due to the following risk factors:
-
-Excessive login attempts (4) indicating potential account compromise
-Customer age (79) falls in higher risk demographic
-Risk Score: 88.35%
-
-Recommendation: Review transaction details and verify customer identity before processing."""
+Provide 2-3 main risk factors and a recommendation."""
 
         print(f"   Sending request...")
         response = client.chat.completions.create(
             model=AZURE_OPENAI_DEPLOYMENT,
             messages=[
-                {"role": "system", "content": "You are a fraud detection expert helping to explain suspicious transactions."},
                 {"role": "user", "content": prompt}
             ],
-            max_completion_tokens=2000
+            max_completion_tokens=1500
         )
         
         result = response.choices[0].message.content
