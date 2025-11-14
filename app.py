@@ -28,8 +28,9 @@ AZURE_OPENAI_DEPLOYMENT = os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4')
 BATCH_SIZE = 50  # Process 50 transactions at a time
 MAX_CONCURRENT_REQUESTS = 10  # Max concurrent API calls
 
-# Mock mode flag
-USE_MOCK_DATA = not ML_API_ENDPOINT or not AZURE_OPENAI_ENDPOINT
+# Check which services are available
+ML_API_AVAILABLE = bool(ML_API_ENDPOINT)
+OPENAI_AVAILABLE = bool(AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_KEY)
 
 
 def get_mock_fraud_prediction(transaction):
@@ -190,7 +191,7 @@ def get_mock_explanation(transaction):
 
 def call_azure_openai(transaction):
     """Call Azure OpenAI for explanation or return mock"""
-    if USE_MOCK_DATA or not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_KEY:
+    if not OPENAI_AVAILABLE:
         print("⚠️ Using mock explanation (OpenAI not configured)")
         return get_mock_explanation(transaction)
     
@@ -244,9 +245,9 @@ def status():
     """API status endpoint"""
     return jsonify({
         'status': 'online',
-        'mock_mode': USE_MOCK_DATA,
-        'ml_api_configured': bool(ML_API_ENDPOINT),
-        'openai_configured': bool(AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_KEY)
+        'ml_api_configured': ML_API_AVAILABLE,
+        'openai_configured': OPENAI_AVAILABLE
+    })
     })
 
 
@@ -334,7 +335,7 @@ def upload_file():
             'total_transactions': len(results),
             'fraudulent_count': len(fraudulent_transactions),
             'fraudulent_transactions': fraudulent_transactions,
-            'mock_mode': not bool(ML_API_ENDPOINT)
+            'ml_mock_mode': not ML_API_AVAILABLE
         })
     
     except Exception as e:
@@ -359,7 +360,7 @@ def explain_fraud():
         
         return jsonify({
             'explanation': explanation,
-            'mock_mode': USE_MOCK_DATA
+            'openai_mock_mode': not OPENAI_AVAILABLE
         })
     
     except Exception as e:
