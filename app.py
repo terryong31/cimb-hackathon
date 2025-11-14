@@ -224,8 +224,7 @@ Provide a clear, concise explanation of the fraud indicators and recommend next 
                 {"role": "system", "content": "You are a fraud detection expert helping to explain suspicious transactions."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
-            max_completion_tokens=2000  # For newer models like gpt-5-mini
+            max_completion_tokens=2000
         )
         
         result = response.choices[0].message.content
