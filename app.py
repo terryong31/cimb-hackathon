@@ -215,7 +215,17 @@ Transaction Details:
 - Customer Age: {transaction.get('CustomerAge', 0)}
 - Fraud Score: {transaction.get('fraud_score', 0):.2%}
 
-Provide a clear, concise explanation of the fraud indicators and recommend next steps."""
+Provide a clear, concise explanation of the fraud indicators and recommend next steps. For example:
+
+🚨 Fraud Alert Analysis
+
+This transaction has been flagged due to the following risk factors:
+
+Excessive login attempts (4) indicating potential account compromise
+Customer age (79) falls in higher risk demographic
+Risk Score: 88.35%
+
+Recommendation: Review transaction details and verify customer identity before processing."""
 
         print(f"   Sending request...")
         response = client.chat.completions.create(
