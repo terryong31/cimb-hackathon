@@ -248,7 +248,6 @@ def status():
         'ml_api_configured': ML_API_AVAILABLE,
         'openai_configured': OPENAI_AVAILABLE
     })
-    })
 
 
 @app.route('/api/upload', methods=['POST'])
