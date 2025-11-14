@@ -2,7 +2,7 @@
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 # More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
 
-name: Build and deploy Python app to Azure Web App - cimbmicrosofthack
+name: Build and deploy Python app to Azure Web App - cimbxmicrosoft
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: '18.0'
 
       - name: Build React frontend
         run: |
@@ -83,6 +83,6 @@ jobs:
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'cimbmicrosofthack'
+          app-name: 'cimbxmicrosoft'
           slot-name: 'Production'
           
