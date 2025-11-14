@@ -43,8 +43,9 @@ jobs:
           mkdir deploy
           # Copy only essential files
           cp app.py requirements.txt runtime.txt deploy/
-          # Copy built frontend (static files only)
-          cp -r frontend/build deploy/frontend/
+          # Copy built frontend maintaining the frontend/build structure
+          mkdir -p deploy/frontend/build
+          cp -r frontend/build/* deploy/frontend/build/
           # Copy uploads folder structure
           mkdir -p deploy/uploads
           # Show what we're deploying
