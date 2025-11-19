@@ -44,3 +44,6 @@ deploy/
 
 # GitHub Actions artifacts
 *.zip
+
+azureml-endpoint/anomaly_model_dir
+azureml-endpoint/uploads
