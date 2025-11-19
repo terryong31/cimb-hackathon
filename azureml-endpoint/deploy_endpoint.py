@@ -1,6 +1,6 @@
 from azure.ai.ml import MLClient
 from azure.identity import DefaultAzureCredential
-from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment, CodeConfiguration, Environment
+from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment, CodeConfiguration, Environment, OnlineRequestSettings
 
 # Connect to Azure
 ml_client = MLClient(
@@ -21,7 +21,7 @@ ml_client.online_endpoints.begin_create_or_update(endpoint).result()
 
 # 2. Define the Deployment
 deployment = ManagedOnlineDeployment(
-    name="<YOUR_UNIQUE_NAME>",
+    name="<YOUR-DEPLOYMENT-NAME>",
     endpoint_name=endpoint_name,
     model="bank-fraud-detection-model@latest",
     instance_type="Standard_D2a_v4",
@@ -36,6 +36,12 @@ deployment = ManagedOnlineDeployment(
     code_configuration=CodeConfiguration(
         code="./", 
         scoring_script="score.py"
+    ),
+    
+    request_settings=OnlineRequestSettings(
+        max_concurrent_requests_per_instance=3000,  # Allow 3000 requests at once
+        request_timeout_ms=60000,                 # Wait up to 60 seconds
+        max_queue_wait_ms=60000                   # Queue wait time
     )
 )
 

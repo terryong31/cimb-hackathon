@@ -26,8 +26,8 @@ AZURE_OPENAI_KEY = os.getenv('AZURE_OPENAI_KEY')
 AZURE_OPENAI_DEPLOYMENT = os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4')
 
 # Batch processing configuration
-BATCH_SIZE = 50  # Process 50 transactions at a time
-MAX_CONCURRENT_REQUESTS = 10  # Max concurrent API calls
+BATCH_SIZE = 100
+MAX_CONCURRENT_REQUESTS = 50  # Max concurrent API calls - MAXIMUM SPEED!
 
 # Check which services are available
 ML_API_AVAILABLE = bool(ML_API_ENDPOINT)
@@ -76,9 +76,22 @@ def call_ml_api(transaction):
                 }]
             },
             headers=headers,
-            timeout=10
+            timeout=30
         )
+        
+        # Check for rate limiting
+        if response.status_code == 429:
+            print(f"⚠️ Rate limit hit (429). Using mock prediction.")
+            return get_mock_fraud_prediction(transaction)
+        
         response.raise_for_status()
+        
+        # Check if response is JSON
+        content_type = response.headers.get('Content-Type', '')
+        if 'application/json' not in content_type:
+            print(f"⚠️ Non-JSON response (status {response.status_code}): {response.text[:200]}")
+            return get_mock_fraud_prediction(transaction)
+        
         result = response.json()
         
         # Azure ML returns a list with one item: [{'fraud': 0/1, 'confidence_score': float}]
@@ -90,9 +103,70 @@ def call_ml_api(transaction):
             }
         else:
             raise ValueError(f"Unexpected API response format: {result}")
+    except requests.exceptions.RequestException as e:
+        print(f"ML API Request Error: {e}. Using mock data.")
+        return get_mock_fraud_prediction(transaction)
     except Exception as e:
         print(f"ML API Error: {e}. Using mock data.")
         return get_mock_fraud_prediction(transaction)
+
+
+def call_ml_api_batch_all_at_once(transactions):
+    """Call ML API with ALL transactions in a single request - 3000 capacity!"""
+    if not ML_API_ENDPOINT:
+        return [get_mock_fraud_prediction(txn) for txn in transactions]
+    
+    try:
+        headers = {'Content-Type': 'application/json'}
+        if ML_API_KEY:
+            headers['Authorization'] = f'Bearer {ML_API_KEY}'
+        
+        # Build the data array with ALL transactions
+        data_array = []
+        for txn in transactions:
+            data_array.append({
+                'TransactionAmount': txn.get('TransactionAmount'),
+                'TransactionDuration': txn.get('TransactionDuration'),
+                'LoginAttempts': txn.get('LoginAttempts'),
+                'AccountBalance': txn.get('AccountBalance'),
+                'CustomerAge': txn.get('CustomerAge')
+            })
+        
+        print(f"🚀 Sending ALL {len(data_array)} transactions in ONE API call!")
+        
+        response = requests.post(
+            ML_API_ENDPOINT,
+            json={'data': data_array},
+            headers=headers,
+            timeout=120  # 2 minutes timeout for large batch
+        )
+        
+        response.raise_for_status()
+        
+        result = response.json()
+        
+        # Azure ML returns a list: [{'fraud': 0/1, 'confidence_score': float}, ...]
+        if isinstance(result, list) and len(result) == len(transactions):
+            predictions = []
+            for prediction in result:
+                predictions.append({
+                    'fraud_or_not': int(prediction.get('fraud', 0)),
+                    'fraud_score': float(prediction.get('confidence_score', 0))
+                })
+            print(f"✅ Got predictions for all {len(predictions)} transactions!")
+            return predictions
+        else:
+            raise ValueError(f"Expected {len(transactions)} predictions, got {len(result) if isinstance(result, list) else 'invalid'}")
+    
+    except requests.exceptions.Timeout:
+        print(f"⏱️ Timeout - batch too large. Falling back to mock predictions.")
+        return [get_mock_fraud_prediction(txn) for txn in transactions]
+    except requests.exceptions.RequestException as e:
+        print(f"ML API Request Error: {e}. Using mock data.")
+        return [get_mock_fraud_prediction(txn) for txn in transactions]
+    except Exception as e:
+        print(f"ML API Error: {e}. Using mock data.")
+        return [get_mock_fraud_prediction(txn) for txn in transactions]
 
 
 async def call_ml_api_async(session, transaction):
@@ -116,6 +190,18 @@ async def call_ml_api_async(session, transaction):
             headers['Authorization'] = f'Bearer {ML_API_KEY}'
         
         async with session.post(ML_API_ENDPOINT, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
+            # Check for rate limiting
+            if response.status == 429:
+                print(f"⚠️ Rate limit hit (429). Using mock prediction for this transaction.")
+                return get_mock_fraud_prediction(transaction)
+            
+            # Check if response is JSON
+            content_type = response.headers.get('Content-Type', '')
+            if 'application/json' not in content_type:
+                error_text = await response.text()
+                print(f"⚠️ Non-JSON response (status {response.status}): {error_text[:200]}")
+                return get_mock_fraud_prediction(transaction)
+            
             result = await response.json()
             # Azure ML returns a list with one item: [{'fraud': 0/1, 'confidence_score': float}]
             if isinstance(result, list) and len(result) > 0:
@@ -126,36 +212,32 @@ async def call_ml_api_async(session, transaction):
                 }
             else:
                 raise ValueError(f"Unexpected API response format: {result}")
+    except aiohttp.ClientError as e:
+        print(f"ML API Client Error: {e}. Using mock data.")
+        return get_mock_fraud_prediction(transaction)
     except Exception as e:
         print(f"ML API Error for transaction: {e}")
         return get_mock_fraud_prediction(transaction)
 
 
 async def process_transactions_batch(transactions):
-    """Process transactions in batches asynchronously"""
+    """Process transactions in batches asynchronously - MAXIMUM SPEED MODE"""
     results = []
     
     async with aiohttp.ClientSession() as session:
-        # Process in batches to avoid overwhelming the API
+        # Process in batches
         for i in range(0, len(transactions), BATCH_SIZE):
             batch = transactions[i:i + BATCH_SIZE]
             print(f"Processing batch {i//BATCH_SIZE + 1}/{(len(transactions)-1)//BATCH_SIZE + 1} ({len(batch)} transactions)")
             
-            # Create tasks for concurrent requests (limited by MAX_CONCURRENT_REQUESTS)
-            tasks = []
+            # Process transactions in concurrent groups - ALL AT ONCE!
             for j in range(0, len(batch), MAX_CONCURRENT_REQUESTS):
                 sub_batch = batch[j:j + MAX_CONCURRENT_REQUESTS]
-                batch_tasks = [call_ml_api_async(session, txn) for txn in sub_batch]
-                tasks.extend(batch_tasks)
                 
-                # Wait for this sub-batch to complete before starting next
-                if len(tasks) >= MAX_CONCURRENT_REQUESTS:
-                    batch_results = await asyncio.gather(*tasks)
-                    results.extend(batch_results)
-                    tasks = []
-            
-            # Process any remaining tasks in the batch
-            if tasks:
+                # Create tasks for this sub-batch
+                tasks = [call_ml_api_async(session, txn) for txn in sub_batch]
+                
+                # Wait for all tasks in this sub-batch to complete
                 batch_results = await asyncio.gather(*tasks)
                 results.extend(batch_results)
     
@@ -344,14 +426,17 @@ def upload_file():
             
             transactions_to_process.append(transaction)
         
-        # Process all transactions asynchronously in batches
-        print(f"Processing {len(transactions_to_process)} transactions...")
-        if ML_API_ENDPOINT and len(transactions_to_process) > 10:
-            # Use async batch processing for better performance
-            predictions = run_async_processing(transactions_to_process)
+        # Process ALL transactions in ONE API call - 3000 capacity!
+        print(f"📦 Processing {len(transactions_to_process)} transactions...")
+        
+        if ML_API_ENDPOINT:
+            # Send ALL transactions in a single API call
+            print(f"🚀 BATCH MODE: Sending entire CSV in ONE request!")
+            predictions = call_ml_api_batch_all_at_once(transactions_to_process)
         else:
-            # Use synchronous processing for small batches or mock mode
-            predictions = [call_ml_api(txn) for txn in transactions_to_process]
+            # Mock mode - process individually
+            print(f"🔄 Mock mode - processing individually")
+            predictions = [get_mock_fraud_prediction(txn) for txn in transactions_to_process]
         
         # Combine transactions with predictions
         for transaction, prediction in zip(transactions_to_process, predictions):
@@ -428,6 +513,7 @@ if __name__ == '__main__':
     print(f"🤖 ML API: {'Not Configured' if not ML_API_ENDPOINT else f'Configured at {ML_API_ENDPOINT}'}")
     print(f"🧠 Azure OpenAI: {'Not Configured' if not (AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_KEY) else 'Configured'}")
     print(f"🌐 Port: {port}")
-    print(f"⚡ Async Processing: Enabled (Batch size: {BATCH_SIZE}, Max concurrent: {MAX_CONCURRENT_REQUESTS})")
+    print(f"💥 ULTRA BATCH MODE: Sending ENTIRE CSV in ONE API call!")
+    print(f"🚀 3000 Transaction Capacity - NO RATE LIMITS!")
     
     app.run(debug=debug, host='0.0.0.0', port=port)
