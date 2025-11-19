@@ -14,8 +14,7 @@ A minimalistic CIMB-themed web application for detecting fraudulent transactions
 
 ## 🚀 Quick demo
 
-Live (deployed): https://cimbxmicrosoft.azurewebsites.net
-Give it some time to run, its Azure web app free tier, don't be shocked if it takes 5 mins to launch the site.
+Live (deployed): https://cimbxmicrosoft.azurewebsites.net (Give it some time to run, its Azure web app free tier, don't be shocked if it takes 5 mins to launch the site.)
 
 ---
 
@@ -229,7 +228,6 @@ cimb-hackathon/
 ├── azureml-endpoint/       # ML model deployment & testing
 │   ├── train-and-deploy.py   # Complete training & deployment
 │   ├── score.py              # Scoring script for endpoint
-│   ├── test_request.py       # Test deployed endpoint
 │   └── bank_transactions_data_2.csv  # Training data
 ├── frontend/               # React app
 │   ├── src/
@@ -274,4 +272,7 @@ cimb-hackathon/
 If you want, I can also add a `.env.example` file and a short commit for this README change — tell me whether you want me to commit it for you or just leave the file for you to review and commit.
 
 **Built with ❤️ for CIMB x Microsoft Hackathon**
+
+
+
 
