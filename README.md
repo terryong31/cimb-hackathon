@@ -90,14 +90,16 @@ Create a `.env` file for local runs (or set these as Azure App Settings in produ
 AZURE_OPENAI_ENDPOINT=https://<your-resource>.cognitiveservices.azure.com/
 AZURE_OPENAI_KEY=your_azure_openai_key
 AZURE_OPENAI_DEPLOYMENT=gpt-5-mini
-ML_API_ENDPOINT=            # optional: https://your-ml-api.example.com/predict
+AZURE_ML_ENDPOINT=https://<your-endpoint>.inference.ml.azure.com/score
+AZURE_ML_API_KEY=your_azure_ml_api_key
 PORT=8000
 SCM_DO_BUILD_DURING_DEPLOYMENT=true
 ```
 
 Notes:
-- If `AZURE_OPENAI_*` are missing the app will run in mock mode for explanations.
-- `ML_API_ENDPOINT` is optional—ML and OpenAI work independently.
+- If `AZURE_OPENAI_*` are missing, the app will run in mock mode for explanations.
+- If `AZURE_ML_ENDPOINT` and `AZURE_ML_API_KEY` are missing, the app will use mock fraud predictions.
+- ML and OpenAI work independently—you can use one or both.
 
 ---
 
@@ -111,6 +113,8 @@ Notes:
 AZURE_OPENAI_ENDPOINT
 AZURE_OPENAI_KEY
 AZURE_OPENAI_DEPLOYMENT=gpt-5-mini
+AZURE_ML_ENDPOINT
+AZURE_ML_API_KEY
 PORT=8000
 SCM_DO_BUILD_DURING_DEPLOYMENT=true
 ```
@@ -125,16 +129,117 @@ gunicorn --bind=0.0.0.0:8000 --timeout 600 app:app
 
 ---
 
+## 🤖 Azure ML Integration
+
+Your app is now integrated with Azure ML for real-time fraud detection! The endpoint uses an XGBoost model trained on transaction patterns.
+
+### Current Configuration
+
+The app is configured to use:
+- **Endpoint**: `https://cimbxms-hackathon-endpoint.southeastasia.inference.ml.azure.com/score`
+- **Environment Variables**: `AZURE_ML_ENDPOINT` and `AZURE_ML_API_KEY`
+
+### API Request/Response Format
+
+**Request format:**
+```json
+{
+  "data": [
+    {
+      "TransactionAmount": 157.47,
+      "TransactionDuration": 169,
+      "LoginAttempts": 1,
+      "AccountBalance": 4120.75,
+      "CustomerAge": 53
+    }
+  ]
+}
+```
+
+**Response format:**
+```json
+[
+  {
+    "fraud": 0,              // 0 = legitimate, 1 = fraudulent
+    "confidence_score": 0.0884  // fraud probability (0.0 to 1.0)
+  }
+]
+```
+
+### Testing the Integration
+
+You can test the ML API integration with the provided test scripts:
+
+```powershell
+# Test ML API directly
+python test_ml_integration.py
+
+# Test full Flask app (requires app to be running)
+# Terminal 1:
+python app.py
+
+# Terminal 2:
+python test_app_integration.py
+```
+
+### Example Predictions
+
+✅ **Low-risk transaction** (Normal):
+- Amount: $157.47, Duration: 169s, Login Attempts: 1
+- Result: `fraud=0`, confidence: 8.84%
+
+🚨 **High-risk transaction** (Fraudulent):
+- Amount: $8500, Duration: 5s, Login Attempts: 5
+- Result: `fraud=1`, confidence: 89.65%
+
+### Performance Features
+
+- ⚡ **Async batch processing** - Processes up to 50 transactions concurrently
+- 🔄 **Automatic fallback** - Uses mock predictions if ML API is unavailable
+- 📊 **Real-time scoring** - ~100-200ms response time per transaction
+- �️ **Error handling** - Graceful degradation with detailed logging
+
+### Deploying Your Own Model
+
+If you want to deploy your own fraud detection model, see the `azureml-endpoint/` directory for:
+- `train-and-deploy.py` - Complete training and deployment script
+- `score.py` - Scoring script for the endpoint
+- `test_request.py` - Test your deployed endpoint
+
+Configuration for your Flask app:
+```powershell
+# For local development (.env file)
+AZURE_ML_ENDPOINT=https://your-endpoint.inference.ml.azure.com/score
+AZURE_ML_API_KEY=your-api-key
+
+# For Azure Web App
+az webapp config appsettings set --name cimbxmicrosoft --resource-group cimbhackathon --settings `
+  AZURE_ML_ENDPOINT="https://your-endpoint.inference.ml.azure.com/score" `
+  AZURE_ML_API_KEY="your-api-key"
+```
+
+---
+
 ## 📁 Project layout
 
 ```
 cimb-hackathon/
-├── .github/workflows/   # CI/CD pipeline
-├── frontend/            # React app
-├── uploads/             # uploaded files
-├── app.py               # Flask app
+├── .github/workflows/      # CI/CD pipeline
+├── azureml-endpoint/       # ML model deployment & testing
+│   ├── train-and-deploy.py   # Complete training & deployment
+│   ├── score.py              # Scoring script for endpoint
+│   ├── test_request.py       # Test deployed endpoint
+│   └── bank_transactions_data_2.csv  # Training data
+├── frontend/               # React app
+│   ├── src/
+│   ├── public/
+│   └── build/             # Production build
+├── uploads/                # Uploaded CSV/Excel files
+├── app.py                  # Flask backend
+├── test_ml_integration.py  # Test ML API directly
+├── test_app_integration.py # Test full app integration
 ├── requirements.txt
-├── runtime.txt          # python runtime pinned to 3.11
+├── runtime.txt            # Python 3.11
 └── README.md
 ```
 

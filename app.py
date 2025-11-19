@@ -19,7 +19,8 @@ CORS(app)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-ML_API_ENDPOINT = os.getenv('ML_API_ENDPOINT')
+ML_API_ENDPOINT = os.getenv('AZURE_ML_ENDPOINT')
+ML_API_KEY = os.getenv('AZURE_ML_API_KEY')
 AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
 AZURE_OPENAI_KEY = os.getenv('AZURE_OPENAI_KEY')
 AZURE_OPENAI_DEPLOYMENT = os.getenv('AZURE_OPENAI_DEPLOYMENT', 'gpt-4')
@@ -59,25 +60,36 @@ def call_ml_api(transaction):
         return get_mock_fraud_prediction(transaction)
     
     try:
+        headers = {'Content-Type': 'application/json'}
+        if ML_API_KEY:
+            headers['Authorization'] = f'Bearer {ML_API_KEY}'
+        
         response = requests.post(
             ML_API_ENDPOINT,
             json={
-                'TransactionAmount': transaction.get('TransactionAmount'),
-                'TransactionDuration': transaction.get('TransactionDuration'),
-                'LoginAttempts': transaction.get('LoginAttempts'),
-                'AccountBalance': transaction.get('AccountBalance'),
-                'CustomerAge': transaction.get('CustomerAge')
+                'data': [{
+                    'TransactionAmount': transaction.get('TransactionAmount'),
+                    'TransactionDuration': transaction.get('TransactionDuration'),
+                    'LoginAttempts': transaction.get('LoginAttempts'),
+                    'AccountBalance': transaction.get('AccountBalance'),
+                    'CustomerAge': transaction.get('CustomerAge')
+                }]
             },
+            headers=headers,
             timeout=10
         )
         response.raise_for_status()
         result = response.json()
         
-        # Map the API response to our expected format
-        return {
-            'fraud_or_not': int(result.get('fraud_prediction', 0)),
-            'fraud_score': float(result.get('fraud_score', 0))
-        }
+        # Azure ML returns a list with one item: [{'fraud': 0/1, 'confidence_score': float}]
+        if isinstance(result, list) and len(result) > 0:
+            prediction = result[0]
+            return {
+                'fraud_or_not': int(prediction.get('fraud', 0)),
+                'fraud_score': float(prediction.get('confidence_score', 0))
+            }
+        else:
+            raise ValueError(f"Unexpected API response format: {result}")
     except Exception as e:
         print(f"ML API Error: {e}. Using mock data.")
         return get_mock_fraud_prediction(transaction)
@@ -90,19 +102,30 @@ async def call_ml_api_async(session, transaction):
     
     try:
         payload = {
-            'TransactionAmount': transaction.get('TransactionAmount'),
-            'TransactionDuration': transaction.get('TransactionDuration'),
-            'LoginAttempts': transaction.get('LoginAttempts'),
-            'AccountBalance': transaction.get('AccountBalance'),
-            'CustomerAge': transaction.get('CustomerAge')
+            'data': [{
+                'TransactionAmount': transaction.get('TransactionAmount'),
+                'TransactionDuration': transaction.get('TransactionDuration'),
+                'LoginAttempts': transaction.get('LoginAttempts'),
+                'AccountBalance': transaction.get('AccountBalance'),
+                'CustomerAge': transaction.get('CustomerAge')
+            }]
         }
         
-        async with session.post(ML_API_ENDPOINT, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as response:
+        headers = {'Content-Type': 'application/json'}
+        if ML_API_KEY:
+            headers['Authorization'] = f'Bearer {ML_API_KEY}'
+        
+        async with session.post(ML_API_ENDPOINT, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as response:
             result = await response.json()
-            return {
-                'fraud_or_not': int(result.get('fraud_prediction', 0)),
-                'fraud_score': float(result.get('fraud_score', 0))
-            }
+            # Azure ML returns a list with one item: [{'fraud': 0/1, 'confidence_score': float}]
+            if isinstance(result, list) and len(result) > 0:
+                prediction = result[0]
+                return {
+                    'fraud_or_not': int(prediction.get('fraud', 0)),
+                    'fraud_score': float(prediction.get('confidence_score', 0))
+                }
+            else:
+                raise ValueError(f"Unexpected API response format: {result}")
     except Exception as e:
         print(f"ML API Error for transaction: {e}")
         return get_mock_fraud_prediction(transaction)
